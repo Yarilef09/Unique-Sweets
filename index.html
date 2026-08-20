@@ -534,15 +534,9 @@
                         <option value="Parcialmente">Parcialmente</option>
                     </select>
                 </div>
-                
-                <!-- Campos de Abono Inicial Actualizados (Bs y USD) -->
-                <div class="form-group group-abono" id="groupAbonoBs" style="display: none;">
-                    <label>Monto Abonado en Bs.S</label>
-                    <input type="number" step="0.01" id="monto_abonado_bs" placeholder="Ej: 4000.00" oninput="calcularAbonoMoneda('bs')">
-                </div>
-                <div class="form-group group-abono" id="groupAbonoUsd" style="display: none;">
-                    <label>Monto Abonado en $</label>
-                    <input type="number" step="0.01" id="monto_abonado" placeholder="0.00" oninput="calcularAbonoMoneda('usd')" value="0">
+                <div class="form-group" id="groupAbono" style="display: none;">
+                    <label>Monto Abonado Inicial ($)</label>
+                    <input type="number" step="0.01" id="monto_abonado" placeholder="Cuánto dio adelantado" value="0">
                 </div>
             </div>
             <button type="submit" class="btn-primary">Guardar Venta</button>
@@ -620,9 +614,9 @@
         </div>
     </section>
 
-    <!-- SECCIÓN 3: CRÉDITOS ( AGRUPADOS POR CLIENTE ) -->
+    <!-- SECCIÓN 3: CRÉDITOS -->
     <section id="modulo-creditos" class="card">
-        <h2 class="section-title">Créditos y Deudas Pendientes por Cliente</h2>
+        <h2 class="section-title">Créditos y Deudas Pendientes</h2>
         <div class="filters-bar" style="margin-bottom: 15px;">
             <div class="filter-group" style="max-width: 400px;">
                 <label style="font-size: 0.85rem;"><strong>Filtrar Cliente:</strong></label>
@@ -637,11 +631,14 @@
             <table id="tablaCreditos">
                 <thead>
                     <tr>
+                        <th>ID</th>
+                        <th>Fecha</th>
                         <th>Cliente</th>
-                        <th>Total Compras Fiadas</th>
-                        <th>Total Abonado ($)</th>
-                        <th>Total Restante ($)</th>
-                        <th>Detalle de Compras / Acciones</th>
+                        <th>Producto</th>
+                        <th>Total ($)</th>
+                        <th>Abonado ($)</th>
+                        <th>Restante ($)</th>
+                        <th>Acción</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -928,20 +925,6 @@
         }
     }
 
-    function calcularAbonoMoneda(origen) {
-        const tasa = parseFloat(document.getElementById('tasa').value);
-        let montoBs = parseFloat(document.getElementById('monto_abonado_bs').value);
-        let montoUsd = parseFloat(document.getElementById('monto_abonado').value);
-
-        if (!tasa || tasa <= 0) return;
-
-        if (origen === 'bs' && !isNaN(montoBs)) {
-            document.getElementById('monto_abonado').value = (montoBs / tasa).toFixed(2);
-        } else if (origen === 'usd' && !isNaN(montoUsd)) {
-            document.getElementById('monto_abonado_bs').value = (montoUsd * tasa).toFixed(2);
-        }
-    }
-
     function calcularModalMoneda(origen) {
         const tasa = parseFloat(document.getElementById('modalTasa').value);
         let montoBs = parseFloat(document.getElementById('modalBs').value);
@@ -964,21 +947,14 @@
 
     function toggleAbonoField() {
         const estado = document.getElementById('estado_pago').value;
-        const groupAbonoBs = document.getElementById('groupAbonoBs');
-        const groupAbonoUsd = document.getElementById('groupAbonoUsd');
-        
+        const groupAbono = document.getElementById('groupAbono');
         if (estado === 'Parcialmente') {
-            groupAbonoBs.style.display = 'block';
-            groupAbonoUsd.style.display = 'block';
+            groupAbono.style.display = 'block';
             document.getElementById('monto_abonado').required = true;
-            document.getElementById('monto_abonado_bs').required = true;
         } else {
-            groupAbonoBs.style.display = 'none';
-            groupAbonoUsd.style.display = 'none';
+            groupAbono.style.display = 'none';
             document.getElementById('monto_abonado').required = false;
-            document.getElementById('monto_abonado_bs').required = false;
             document.getElementById('monto_abonado').value = '0';
-            document.getElementById('monto_abonado_bs').value = '';
         }
     }
 
@@ -996,7 +972,7 @@
 
         if (estadoPago === 'Parcialmente') {
             if (rawAbono <= 0 || montoBsInicial <= 0) {
-                mostrarToast('Error: Si se registra un abono, los montos en Dólares ($) y en Bolívares (Bs) son obligatorios.', 'error');
+                mostrarToast('Error: Si se registra un abono, los montos iniciales en Dólares ($) y en Bolívares (Bs) son obligatorios.', 'error');
                 return;
             }
             if (rawAbono >= montoTotalUsd) {
@@ -1012,12 +988,10 @@
             }
         }
 
-        const notaAbonoInicial = (estadoPago === 'Parcialmente') ? ` | [Abono: $${rawAbono.toFixed(2)} / Bs.${parseFloat(document.getElementById('monto_abonado_bs').value || 0).toFixed(2)} / Tasa: ${tasaActual} / Fecha: ${fechaVentaInput} / Met: ${metodoPagoVal}]` : '';
-
         const ventaData = {
             fecha: fechaVentaInput,
             producto: productoVal,
-            descripcion: descVal + notaAbonoInicial,
+            descripcion: descVal,
             cantidad: parseFloat(document.getElementById('cantidad').value) || 0,
             cliente: clienteVal,
             monto_usd: montoTotalUsd,
@@ -1048,7 +1022,7 @@
                 descripcion: `Venta: ${productoVal} - Cliente: ${clienteVal}`
             }]);
         } else if (estadoPago === 'Parcialmente') {
-            const proporcionBs = parseFloat(document.getElementById('monto_abonado_bs').value) || (tasaActual > 0 ? (rawAbono * tasaActual) : 0);
+            const proporcionBs = tasaActual > 0 ? (rawAbono * tasaActual) : (montoBsInicial * (rawAbono / montoTotalUsd));
             await supabaseClient.from('movimientos').insert([{
                 tipo: 'Ingreso',
                 montoOriginal: proporcionBs,
@@ -1065,10 +1039,8 @@
         mostrarToast('¡Venta registrada con éxito!', 'success');
         document.getElementById('formVenta').reset();
         document.getElementById('fecha').valueAsDate = new Date();
-        document.getElementById('groupAbonoBs').style.display = 'none';
-        document.getElementById('groupAbonoUsd').style.display = 'none';
+        document.getElementById('groupAbono').style.display = 'none';
         document.getElementById('monto_abonado').value = '0';
-        document.getElementById('monto_abonado_bs').value = '';
         await consultarTasaBCVBtn(); 
         cargarDatos();
         cargarInsumosUs();
@@ -1126,9 +1098,6 @@
 
         const filtroClienteCreditoVal = document.getElementById('filtroClienteCreditos').value.toLowerCase().trim();
 
-        // Agrupación para créditos pendientes por cliente
-        const creditosPorCliente = {};
-
         ventas.forEach(v => {
             let pasaFiltroFecha = true;
             if (filtroMes) {
@@ -1154,7 +1123,7 @@
                 let columnaAbonosHTML = '';
                 let filaDesplegableHTML = '';
 
-                if (abonosHistorial.length > 0) {
+                if (abonosHistorial.length > 0 || v.estado_pago === 'Parcialmente') {
                     columnaAbonosHTML = `
                         <button class="btn" style="padding: 3px 8px; font-size: 0.75rem; background: var(--warning); height: auto;" onclick="toggleDetalleAbono(${v.id})">
                             Ver Abonos (${abonosHistorial.length}) ▾
@@ -1165,13 +1134,11 @@
                             <td colspan="12">
                                 <strong>Historial de Abonos / Pagos Parciales:</strong>
                                 <ul style="margin: 5px 0 0 20px;">
-                                    ${abonosHistorial.map(a => `<li>${a.replace(/[\[\]]/g, '')}</li>`).join('')}
+                                    ${abonosHistorial.length > 0 ? abonosHistorial.map(a => `<li>${a.replace(/[\[\]]/g, '')}</li>`).join('') : `<li>Abono inicial registrado: $${v.monto_abonado || 0}</li>`}
                                 </ul>
                             </td>
                         </tr>
                     `;
-                } else if (v.estado_pago === 'Parcialmente') {
-                    columnaAbonosHTML = `<span style="color: var(--text-secondary); font-size: 0.8rem;">Abono inicial: $${v.monto_abonado || 0}</span>`;
                 } else {
                     columnaAbonosHTML = `<span style="color: var(--text-secondary); font-size: 0.8rem;">Sin abonos</span>`;
                 }
@@ -1217,79 +1184,27 @@
                 `;
             }
 
-            // Agrupar créditos y parciales
             if (v.estado_pago === 'No' || v.estado_pago === 'Parcialmente') {
-                const clienteKey = v.cliente || 'GENERAL';
-                if (!creditosPorCliente[clienteKey]) {
-                    creditosPorCliente[clienteKey] = {
-                        cliente: clienteKey,
-                        totalFiado: 0,
-                        totalAbonado: 0,
-                        totalRestante: 0,
-                        compras: []
-                    };
+                const pasaClienteCredito = !filtroClienteCreditoVal || (v.cliente && v.cliente.toLowerCase().includes(filtroClienteCreditoVal));
+                
+                if (pasaClienteCredito) {
+                    let restante = (v.monto_usd || 0) - (v.monto_abonado || 0);
+                    tbodyCreditos.innerHTML += `
+                        <tr>
+                            <td>${v.id}</td>
+                            <td>${v.fecha}</td>
+                            <td><b>${v.cliente}</b></td>
+                            <td>${v.producto}</td>
+                            <td>$ ${(v.monto_usd || 0).toFixed(2)}</td>
+                            <td>$ ${(v.monto_abonado || 0).toFixed(2)}</td>
+                            <td style="color: var(--danger); font-weight: bold;">$ ${restante.toFixed(2)}</td>
+                            <td>
+                                <button class="btn" style="padding: 4px 10px; font-size: 0.8rem; background: var(--success); height: auto;" onclick="abrirModalAbono(${v.id})">Abonar / Pagar</button>
+                            </td>
+                        </tr>
+                    `;
                 }
-                let totalV = v.monto_usd || 0;
-                let abonV = v.monto_abonado || 0;
-                let restV = totalV - abonV;
-
-                creditosPorCliente[clienteKey].totalFiado += totalV;
-                creditosPorCliente[clienteKey].totalAbonado += abonV;
-                creditosPorCliente[clienteKey].totalRestante += restV;
-                creditosPorCliente[clienteKey].compras.push(v);
             }
-        });
-
-        // Renderizar créditos agrupados por cliente
-        Object.values(creditosPorCliente).forEach(( grupo, idx ) => {
-            const pasaClienteCredito = !filtroClienteCreditoVal || grupo.cliente.toLowerCase().includes(filtroClienteCreditoVal);
-            if (!pasaClienteCredito) return;
-
-            let listaComprasHTML = grupo.compras.map(c => {
-                let r = (c.monto_usd || 0) - (c.monto_abonado || 0);
-                let descCorta = c.descripcion ? c.descripcion.split('|')[0].trim() : '-';
-                return `
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 8px 12px; margin-bottom: 6px; border-radius: 8px; border: 1px solid var(--border-color); gap: 10px; flex-wrap: wrap;">
-                        <div>
-                            <strong>ID: ${c.id}</strong> | ${c.fecha} | <b>${c.producto}</b> (Cant: ${c.cantidad}) - Detalle: ${descCorta}<br>
-                            <span style="font-size: 0.75rem; color: var(--text-secondary);">Total: $${(c.monto_usd||0).toFixed(2)} | Abonado: $${(c.monto_abonado||0).toFixed(2)} | <strong style="color: var(--danger);">Restante: $${r.toFixed(2)}</strong></span>
-                        </div>
-                        <button class="btn" style="padding: 4px 10px; font-size: 0.75rem; background: var(--success); height: auto;" onclick="abrirModalAbono(${c.id})">Abonar / Pagar</button>
-                    </div>
-                `;
-            }).join('');
-
-            // IDs de las compras de este cliente separados por coma para pasarlos al botón de saldo total
-            let idsString = grupo.compras.map(c => c.id).join(',');
-
-            tbodyCreditos.innerHTML += `
-                <tr>
-                    <td><b>${grupo.cliente}</b></td>
-                    <td>$ ${grupo.totalFiado.toFixed(2)}</td>
-                    <td>$ ${grupo.totalAbonado.toFixed(2)}</td>
-                    <td style="color: var(--danger); font-weight: bold;">$ ${grupo.totalRestante.toFixed(2)}</td>
-                    <td>
-                        <button class="btn" style="padding: 4px 10px; font-size: 0.8rem; background: var(--warning); height: auto;" onclick="toggleDetalleCreditoCliente(${idx})">
-                            Ver Compras (${grupo.compras.length}) ▾
-                        </button>
-                    </td>
-                </tr>
-                <tr id="credito-cliente-row-${idx}" class="abonos-row">
-                    <td colspan="5">
-                        <div style="padding: 5px 0;">
-                            <strong>Detalle de Compras a Crédito / Parciales de ${grupo.cliente}:</strong>
-                            <div style="margin-top: 8px;">
-                                ${listaComprasHTML}
-                            </div>
-                            <div style="margin-top: 12px; display: flex; justify-content: flex-end; border-top: 1px dashed var(--border-color); padding-top: 10px;">
-                                <button class="btn" style="background: var(--primary); font-size: 0.85rem;" onclick="abrirModalSaldarCliente('${grupo.cliente}', '${idsString}', ${grupo.totalRestante})">
-                                    💰 Abonar / Saldar Deuda Completa ($${grupo.totalRestante.toFixed(2)})
-                                </button>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            `;
         });
 
         if (tbodyVentas.innerHTML === '') {
@@ -1299,7 +1214,7 @@
             tbodyEncargos.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-secondary);">No hay encargos para fechas futuras.</td></tr>`;
         }
         if (tbodyCreditos.innerHTML === '') {
-            tbodyCreditos.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No hay créditos pendientes que coincidan con la búsqueda.</td></tr>`;
+            tbodyCreditos.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">No hay créditos pendientes que coincidan con la búsqueda.</td></tr>`;
         }
     }
 
@@ -1310,37 +1225,12 @@
         }
     }
 
-    function toggleDetalleCreditoCliente(idx) {
-        const fila = document.getElementById(`credito-cliente-row-${idx}`);
-        if (fila) {
-            fila.style.display = fila.style.display === 'table-row' ? 'none' : 'table-row';
-        }
-    }
-
     function abrirModalAbono(id) {
-        document.getElementById('modalTitulo').textContent = 'Registrar Abono o Pago (Compra)';
         document.getElementById('modalVentaId').value = id;
         document.getElementById('modalFecha').valueAsDate = new Date();
         document.getElementById('modalTasa').value = document.getElementById('tasa').value;
         document.getElementById('modalBs').value = '';
         document.getElementById('modalUsd').value = '';
-        
-        // Guardamos bandera para indicar que es un abono individual
-        document.getElementById('formAbonoModal').dataset.modo = 'individual';
-        document.getElementById('modalAbono').style.display = 'flex';
-    }
-
-    function abrirModalSaldarCliente(clienteNombre, idsStr, totalRestante) {
-        document.getElementById('modalTitulo').textContent = `Saldar Deuda Completa: ${clienteNombre}`;
-        document.getElementById('modalVentaId').value = idsStr; // Guardamos los IDs separados por coma
-        document.getElementById('modalFecha').valueAsDate = new Date();
-        const tasaActual = parseFloat(document.getElementById('tasa').value) || 36.50;
-        document.getElementById('modalTasa').value = tasaActual;
-        document.getElementById('modalUsd').value = totalRestante.toFixed(2);
-        document.getElementById('modalBs').value = (totalRestante * tasaActual).toFixed(2);
-        
-        // Guardamos bandera para indicar que es abono masivo/total por cliente
-        document.getElementById('formAbonoModal').dataset.modo = 'masivo';
         document.getElementById('modalAbono').style.display = 'flex';
     }
 
@@ -1350,117 +1240,65 @@
 
     async function procesarAbonoModal(e) {
         e.preventDefault();
-        const modo = document.getElementById('formAbonoModal').dataset.modo || 'individual';
+        const id = parseInt(document.getElementById('modalVentaId').value);
         const fechaAbono = document.getElementById('modalFecha').value;
         const tasaAbono = parseFloat(document.getElementById('modalTasa').value);
         const bsAbono = parseFloat(document.getElementById('modalBs').value);
         const usdAdicional = parseFloat(document.getElementById('modalUsd').value);
         const metodoAbono = document.getElementById('modalMetodo').value;
-        const rawIds = document.getElementById('modalVentaId').value;
 
-        if (modo === 'individual') {
-            const id = parseInt(rawIds);
-            const ventaActual = globalVentasData.find(v => v.id === id);
-            if (!ventaActual) return;
+        const ventaActual = globalVentasData.find(v => v.id === id);
+        if (!ventaActual) return;
 
-            const totalVenta = ventaActual.monto_usd || 0;
-            const abonadoActual = ventaActual.monto_abonado || 0;
-            const nuevoAbonadoUsd = abonadoActual + usdAdicional;
-            
-            let descActual = ventaActual.descripcion || '';
-            let partesDesc = descActual.split('|');
-
-            let nuevoEstado = 'Parcialmente';
-            if (nuevoAbonadoUsd >= totalVenta) {
-                nuevoEstado = 'Sí';
+        const totalVenta = ventaActual.monto_usd || 0;
+        const abonadoActual = ventaActual.monto_abonado || 0;
+        const nuevoAbonadoUsd = abonadoActual + usdAdicional;
+        
+        let sumaBsAbonosAnteriores = 0;
+        let descActual = ventaActual.descripcion || '';
+        let partesDesc = descActual.split('|');
+        partesDesc.slice(1).forEach(parte => {
+            let matchBs = parte.match(/Bs\.([0-9\.]+)/);
+            if (matchBs && matchBs[1]) {
+                sumaBsAbonosAnteriores += parseFloat(matchBs[1]) || 0;
             }
+        });
 
-            const notaExtra = ` | [Abono: $${usdAdicional.toFixed(2)} / Bs.${bsAbono.toFixed(2)} / Tasa: ${tasaAbono} / Fecha: ${fechaAbono} / Met: ${metodoAbono}]`;
-            const descripcionActualizada = partesDesc[0].trim() + (partesDesc.slice(1).join('|') ? '|' + partesDesc.slice(1).join('|') : '') + notaExtra;
+        const nuevoBsAcumulado = sumaBsAbonosAnteriores + bsAbono;
 
-            const { error } = await supabaseClient.from('ventas').update({
-                monto_abonado: nuevoAbonadoUsd,
-                estado_pago: nuevoEstado,
-                descripcion: descripcionActualizada
-            }).eq('id', id);
-
-            if (error) {
-                mostrarToast('Error al registrar el abono', 'error');
-                return;
-            }
-
-            await supabaseClient.from('movimientos').insert([{
-                tipo: 'Ingreso',
-                montoOriginal: bsAbono,
-                moneda: 'USD',
-                tasa: tasaAbono > 0 ? tasaAbono : 1,
-                montoUsd: usdAdicional,
-                montoVes: bsAbono,
-                categoria: 'UNIQUE SWEETS',
-                fecha: fechaAbono,
-                descripcion: `Abono de venta ID ${id} - Cliente: ${ventaActual.cliente}`
-            }]);
-
-        } else {
-            // Modo masivo: saldar o abonar proporcionalmente a todas las compras pendientes de ese cliente
-            const idsArray = rawIds.split(',').map(i => parseInt(i)).filter(Boolean);
-            
-            // Recalculamos el total restante exacto de esas compras para repartir el monto abonado de forma limpia
-            let comprasPendientes = idsArray.map(id => globalVentasData.find(v => v.id === id)).filter(Boolean);
-            let totalRestanteGlobal = comprasPendientes.reduce((acc, c) => acc + ((c.monto_usd || 0) - (c.monto_abonado || 0)), 0);
-
-            if (totalRestanteGlobal <= 0) {
-                mostrarToast('La deuda ya se encuentra saldada', 'error');
-                return;
-            }
-
-            let montoPorDistribuir = usdAdicional;
-            let bsPorDistribuir = bsAbono;
-
-            for (let i = 0; i < comprasPendientes.length; i++) {
-                let c = comprasPendientes[i];
-                let restanteCompra = (c.monto_usd || 0) - (c.monto_abonado || 0);
-                if (restanteCompra <= 0) continue;
-
-                // Cuánto le corresponde a esta compra en esta transacción
-                let abonoEstaCompraUsd = (i === comprasPendientes.length - 1) ? montoPorDistribuir : Math.min(montoPorDistribuir, restanteCompra);
-                if (abonoEstaCompraUsd <= 0) break;
-
-                let abonoEstaCompraBs = (tasaAbono > 0) ? (abonoEstaCompraUsd * tasaAbono) : (bsPorDistribuir * (abonoEstaCompraUsd / usdAdicional));
-
-                montoPorDistribuir -= abonoEstaCompraUsd;
-                bsPorDistribuir -= abonoEstaCompraBs;
-
-                let nuevoAbonadoUsd = (c.monto_abonado || 0) + abonoEstaCompraUsd;
-                let nuevoEstado = (nuevoAbonadoUsd >= (c.monto_usd || 0)) ? 'Sí' : 'Parcialmente';
-
-                let descActual = c.descripcion || '';
-                let partesDesc = descActual.split('|');
-                let notaExtra = ` | [Abono Total: $${abonoEstaCompraUsd.toFixed(2)} / Bs.${abonoEstaCompraBs.toFixed(2)} / Tasa: ${tasaAbono} / Fecha: ${fechaAbono} / Met: ${metodoAbono}]`;
-                let descripcionActualizada = partesDesc[0].trim() + (partesDesc.slice(1).join('|') ? '|' + partesDesc.slice(1).join('|') : '') + notaExtra;
-
-                await supabaseClient.from('ventas').update({
-                    monto_abonado: nuevoAbonadoUsd,
-                    estado_pago: nuevoEstado,
-                    descripcion: descripcionActualizada
-                }).eq('id', c.id);
-            }
-
-            // Registrar el movimiento de ingreso global
-            await supabaseClient.from('movimientos').insert([{
-                tipo: 'Ingreso',
-                montoOriginal: bsAbono,
-                moneda: 'USD',
-                tasa: tasaAbono > 0 ? tasaAbono : 1,
-                montoUsd: usdAdicional,
-                montoVes: bsAbono,
-                categoria: 'UNIQUE SWEETS',
-                fecha: fechaAbono,
-                descripcion: `Pago total/parcial de deudas de cliente: ${comprasPendientes[0]?.cliente || 'CLIENTE'}`
-            }]);
+        let nuevoEstado = 'Parcialmente';
+        if (nuevoAbonadoUsd >= totalVenta) {
+            nuevoEstado = 'Sí';
         }
 
-        mostrarToast('¡Pago / Abono registrado con éxito!', 'success');
+        const notaExtra = ` | [Abono: $${usdAdicional.toFixed(2)} / Bs.${bsAbono.toFixed(2)} / Tasa: ${tasaAbono} / Fecha: ${fechaAbono} / Met: ${metodoAbono}]`;
+        const descripcionActualizada = partesDesc[0].trim() + (partesDesc.slice(1).join('|') ? '|' + partesDesc.slice(1).join('|') : '') + notaExtra;
+
+        const { error } = await supabaseClient.from('ventas').update({
+            monto_abonado: nuevoAbonadoUsd,
+            monto_bs: nuevoBsAcumulado,
+            estado_pago: nuevoEstado,
+            descripcion: descripcionActualizada
+        }).eq('id', id);
+
+        if (error) {
+            mostrarToast('Error al registrar el abono', 'error');
+            return;
+        }
+
+        await supabaseClient.from('movimientos').insert([{
+            tipo: 'Ingreso',
+            montoOriginal: bsAbono,
+            moneda: 'USD',
+            tasa: tasaAbono > 0 ? tasaAbono : 1,
+            montoUsd: usdAdicional,
+            montoVes: bsAbono,
+            categoria: 'UNIQUE SWEETS',
+            fecha: fechaAbono,
+            descripcion: `Abono de venta ID ${id} - Cliente: ${ventaActual.cliente}`
+        }]);
+
+        mostrarToast('¡Abono registrado con éxito!', 'success');
         cerrarModalAbono();
         cargarDatos();
         cargarInsumosUs();
@@ -1477,26 +1315,37 @@
         }
     }
 
+    // FUNCIÓN ACTUALIZADA PARA UNIR `movimientos` Y `dolares` MANUALMENTE
     async function cargarInsumosUs() {
-        const { data, error } = await supabaseClient.from('movimientos').select('*').order('fecha', { ascending: false });
-        
+        // 1. Obtener registros de 'movimientos' filtrados por INSUMOS US
+        const { data: movimientos, error: err1 } = await supabaseClient
+            .from('movimientos')
+            .select('*')
+            .ilike('categoria', '%INSUMOS US%');
+
+        // 2. Obtener registros de 'dolares' filtrados por egresos e INSUMOS US
+        const { data: dolares, error: err2 } = await supabaseClient
+            .from('dolares')
+            .select('*')
+            .eq('tipoTransaccion', 'EGRESOS')
+            .ilike('categoria', '%INSUMOS US%');
+
         const tbody = document.querySelector('#tablaInsumosUs tbody');
         if (!tbody) return;
         tbody.innerHTML = '';
         let totalInsumos = 0;
 
-        if (error || !data) {
+        if (err1 && err2) {
             globalInsumosData = [];
             document.getElementById('resumenMontoInvertido').textContent = `$ 0.00`;
             actualizarAnaliticasGlobales();
             return;
         }
 
-        globalInsumosData = data.filter(m => {
-            const cat = (m.categoria || m.Categoría || '').toString().toUpperCase();
-            return cat.includes('INSUMOS US');
-        });
+        // 3. Unir ambos arreglos en una sola variable global
+        globalInsumosData = [...(movimientos || []), ...(dolares || [])];
 
+        // 4. Ordenar del más reciente al más antiguo
         globalInsumosData.sort((a, b) => {
             const fechaA = new Date(a.fecha);
             const fechaB = new Date(b.fecha);
@@ -1504,6 +1353,7 @@
             return (b.id || 0) - (a.id || 0);
         });
 
+        // 5. Renderizar los datos en la tabla
         globalInsumosData.forEach(m => {
             let valorMonto = parseFloat(m.montoOriginal || m.montoUsd || m.monto || 0);
             totalInsumos += valorMonto;
