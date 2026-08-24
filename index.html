@@ -614,9 +614,9 @@
         </div>
     </section>
 
-    <!-- SECCIÓN 3: CRÉDITOS -->
+    <!-- SECCIÓN 3: CRÉDITOS (Modificado para agrupar por persona y desplegable de compras) -->
     <section id="modulo-creditos" class="card">
-        <h2 class="section-title">Créditos y Deudas Pendientes</h2>
+        <h2 class="section-title">Créditos y Deudas Pendientes por Persona</h2>
         <div class="filters-bar" style="margin-bottom: 15px;">
             <div class="filter-group" style="max-width: 400px;">
                 <label style="font-size: 0.85rem;"><strong>Filtrar Cliente:</strong></label>
@@ -631,14 +631,11 @@
             <table id="tablaCreditos">
                 <thead>
                     <tr>
-                        <th>ID</th>
-                        <th>Fecha</th>
                         <th>Cliente</th>
-                        <th>Producto</th>
-                        <th>Total ($)</th>
-                        <th>Abonado ($)</th>
-                        <th>Restante ($)</th>
-                        <th>Acción</th>
+                        <th>Total Compras Pendientes ($)</th>
+                        <th>Total Abonado ($)</th>
+                        <th>Restante Total ($)</th>
+                        <th>Detalle de Compras / Acciones</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
@@ -1098,6 +1095,9 @@
 
         const filtroClienteCreditoVal = document.getElementById('filtroClienteCreditos').value.toLowerCase().trim();
 
+        // Agrupación de créditos por cliente
+        const creditosPorCliente = {};
+
         ventas.forEach(v => {
             let pasaFiltroFecha = true;
             if (filtroMes) {
@@ -1184,26 +1184,71 @@
                 `;
             }
 
+            // Recolectar créditos pendientes para agrupar por cliente
             if (v.estado_pago === 'No' || v.estado_pago === 'Parcialmente') {
-                const pasaClienteCredito = !filtroClienteCreditoVal || (v.cliente && v.cliente.toLowerCase().includes(filtroClienteCreditoVal));
-                
-                if (pasaClienteCredito) {
-                    let restante = (v.monto_usd || 0) - (v.monto_abonado || 0);
-                    tbodyCreditos.innerHTML += `
-                        <tr>
-                            <td>${v.id}</td>
-                            <td>${v.fecha}</td>
-                            <td><b>${v.cliente}</b></td>
-                            <td>${v.producto}</td>
-                            <td>$ ${(v.monto_usd || 0).toFixed(2)}</td>
-                            <td>$ ${(v.monto_abonado || 0).toFixed(2)}</td>
-                            <td style="color: var(--danger); font-weight: bold;">$ ${restante.toFixed(2)}</td>
-                            <td>
-                                <button class="btn" style="padding: 4px 10px; font-size: 0.8rem; background: var(--success); height: auto;" onclick="abrirModalAbono(${v.id})">Abonar / Pagar</button>
-                            </td>
-                        </tr>
-                    `;
+                const clienteKey = v.cliente || 'DESCONOCIDO';
+                if (!creditosPorCliente[clienteKey]) {
+                    creditosPorCliente[clienteKey] = {
+                        cliente: clienteKey,
+                        totalMonto: 0,
+                        totalAbonado: 0,
+                        totalRestante: 0,
+                        compras: []
+                    };
                 }
+                let totalVenta = v.monto_usd || 0;
+                let abonadoVenta = v.monto_abonado || 0;
+                let restanteVenta = totalVenta - abonadoVenta;
+
+                creditosPorCliente[clienteKey].totalMonto += totalVenta;
+                creditosPorCliente[clienteKey].totalAbonado += abonadoVenta;
+                creditosPorCliente[clienteKey].totalRestante += restanteVenta;
+                creditosPorCliente[clienteKey].compras.push(v);
+            }
+        });
+
+        // Renderizar la tabla de créditos agrupada por persona con menú desplegable
+        Object.values(creditosPorCliente).forEach((grupo, index) => {
+            const pasaClienteCredito = !filtroClienteCreditoVal || grupo.cliente.toLowerCase().includes(filtroClienteCreditoVal);
+            if (pasaClienteCredito) {
+                let idFilaDesplegable = `credito-row-${index}`;
+                
+                let listaComprasHTML = grupo.compras.map(c => {
+                    let restanteCompra = (c.monto_usd || 0) - (c.monto_abonado || 0);
+                    return `
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 8px 12px; margin-bottom: 6px; border-radius: 8px; border: 1px solid var(--border-color);">
+                            <div>
+                                <strong>ID #${c.id}</strong> - ${c.fecha} | <b>${c.producto}</b> (Cant: ${c.cantidad})<br>
+                                <span style="font-size: 0.75rem; color: var(--text-secondary);">Total: $${(c.monto_usd||0).toFixed(2)} | Abonado: $${(c.monto_abonado||0).toFixed(2)} | <b>Restante: $${restanteCompra.toFixed(2)}</b></span>
+                            </div>
+                            <button class="btn" style="padding: 4px 10px; font-size: 0.75rem; background: var(--success); height: auto;" onclick="abrirModalAbono(${c.id})">Abonar</button>
+                        </div>
+                    `;
+                }).join('');
+
+                tbodyCreditos.innerHTML += `
+                    <tr>
+                        <td><b>${grupo.cliente}</b></td>
+                        <td>$ ${grupo.totalMonto.toFixed(2)}</td>
+                        <td>$ ${grupo.totalAbonado.toFixed(2)}</td>
+                        <td style="color: var(--danger); font-weight: bold;">$ ${grupo.totalRestante.toFixed(2)}</td>
+                        <td>
+                            <button class="btn" style="padding: 5px 12px; font-size: 0.8rem; background: var(--warning); height: auto;" onclick="toggleDetalleCredito('${idFilaDesplegable}')">
+                                Ver Compras (${grupo.compras.length}) ▾
+                            </button>
+                        </td>
+                    </tr>
+                    <tr id="${idFilaDesplegable}" class="abonos-row">
+                        <td colspan="5">
+                            <div style="padding: 5px 10px;">
+                                <strong>Detalle de compras pendientes de ${grupo.cliente}:</strong>
+                                <div style="margin-top: 8px;">
+                                    ${listaComprasHTML}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
             }
         });
 
@@ -1214,12 +1259,19 @@
             tbodyEncargos.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-secondary);">No hay encargos para fechas futuras.</td></tr>`;
         }
         if (tbodyCreditos.innerHTML === '') {
-            tbodyCreditos.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-secondary);">No hay créditos pendientes que coincidan con la búsqueda.</td></tr>`;
+            tbodyCreditos.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No hay créditos pendientes que coincidan con la búsqueda.</td></tr>`;
         }
     }
 
     function toggleDetalleAbono(id) {
         const fila = document.getElementById(`abono-row-${id}`);
+        if (fila) {
+            fila.style.display = fila.style.display === 'table-row' ? 'none' : 'table-row';
+        }
+    }
+
+    function toggleDetalleCredito(idFila) {
+        const fila = document.getElementById(idFila);
         if (fila) {
             fila.style.display = fila.style.display === 'table-row' ? 'none' : 'table-row';
         }
@@ -1315,15 +1367,12 @@
         }
     }
 
-    // FUNCIÓN ACTUALIZADA PARA UNIR `movimientos` Y `dolares` MANUALMENTE
     async function cargarInsumosUs() {
-        // 1. Obtener registros de 'movimientos' filtrados por INSUMOS US
         const { data: movimientos, error: err1 } = await supabaseClient
             .from('movimientos')
             .select('*')
             .ilike('categoria', '%INSUMOS US%');
 
-        // 2. Obtener registros de 'dolares' filtrados por egresos e INSUMOS US
         const { data: dolares, error: err2 } = await supabaseClient
             .from('dolares')
             .select('*')
@@ -1342,10 +1391,8 @@
             return;
         }
 
-        // 3. Unir ambos arreglos en una sola variable global
         globalInsumosData = [...(movimientos || []), ...(dolares || [])];
 
-        // 4. Ordenar del más reciente al más antiguo
         globalInsumosData.sort((a, b) => {
             const fechaA = new Date(a.fecha);
             const fechaB = new Date(b.fecha);
@@ -1353,7 +1400,6 @@
             return (b.id || 0) - (a.id || 0);
         });
 
-        // 5. Renderizar los datos en la tabla
         globalInsumosData.forEach(m => {
             let valorMonto = parseFloat(m.montoOriginal || m.montoUsd || m.monto || 0);
             totalInsumos += valorMonto;
