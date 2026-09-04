@@ -614,7 +614,7 @@
         </div>
     </section>
 
-    <!-- SECCIÓN 3: CRÉDITOS (Con botón fucsia Abonar Todo restaurado) -->
+    <!-- SECCIÓN 3: CRÉDITOS -->
     <section id="modulo-creditos" class="card">
         <h2 class="section-title">Créditos y Deudas Pendientes por Persona</h2>
         <div class="filters-bar" style="margin-bottom: 15px;">
@@ -650,6 +650,7 @@
             <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: normal;">
                 <label for="filtroMesGlobal" style="margin: 0; color: var(--text-primary); font-weight: 600;">Mes:</label>
                 <input type="month" id="filtroMesGlobal" style="width: 145px; padding: 6px; font-size: 0.85rem;" onchange="actualizarAnaliticasGlobales()">
+                <button class="btn" style="padding: 0 10px; height: 32px; font-size: 0.75rem;" onclick="document.getElementById('filtroMesGlobal').value=''; actualizarAnaliticasGlobales();" title="Ver todo sin filtro de mes">Ver Todo</button>
             </div>
         </h2>
         
@@ -1052,7 +1053,6 @@
         globalVentasData = ordenarHistorial(data || []);
         actualizarListasDesplegablesPropias(globalVentasData);
         renderizarTablasGlobal();
-        actualizarResumenSuperior(globalVentasData);
         actualizarAnaliticasGlobales();
     }
 
@@ -1065,7 +1065,9 @@
         document.getElementById('filtroFechaDesde').value = '';
         document.getElementById('filtroFechaHasta').value = '';
         document.getElementById('filtroClienteVentas').value = '';
+        document.getElementById('filtroMesGlobal').value = ''; // También limpia el filtro global de analíticas para ver todo
         renderizarTablasGlobal();
+        actualizarAnaliticasGlobales();
     }
 
     function actualizarListasDesplegablesPropias(ventas) {
@@ -1096,7 +1098,6 @@
 
         const filtroClienteCreditoVal = document.getElementById('filtroClienteCreditos').value.toLowerCase().trim();
 
-        // Agrupación de créditos por cliente
         const creditosPorCliente = {};
 
         ventas.forEach(v => {
@@ -1124,10 +1125,10 @@
                 let columnaAbonosHTML = '';
                 let filaDesplegableHTML = '';
 
-                if (abonosHistorial.length > 0 || v.estado_pago === 'Parcialmente') {
+                if (abonosHistorial.length > 0 || v.estado_pargcialmente || v.estado_pago === 'Parcialmente') {
                     columnaAbonosHTML = `
                         <button class="btn" style="padding: 3px 8px; font-size: 0.75rem; background: var(--warning); height: auto;" onclick="toggleDetalleAbono(${v.id})">
-                            Ver Abonos (${abonosHistorial.length}) ▾
+                            Ver Abonos (${abonosHistorial.length > 0 ? abonosHistorial.length : 1}) ▾
                         </button>
                     `;
                     filaDesplegableHTML = `
@@ -1185,7 +1186,6 @@
                 `;
             }
 
-            // Recolectar créditos pendientes para agrupar por cliente
             if (v.estado_pago === 'No' || v.estado_pago === 'Parcialmente') {
                 const clienteKey = v.cliente || 'DESCONOCIDO';
                 if (!creditosPorCliente[clienteKey]) {
@@ -1208,7 +1208,6 @@
             }
         });
 
-        // Renderizar la tabla de créditos agrupada por persona con botón fucsia de Abonar Todo y menú desplegable
         Object.values(creditosPorCliente).forEach((grupo, index) => {
             const pasaClienteCredito = !filtroClienteCreditoVal || grupo.cliente.toLowerCase().includes(filtroClienteCreditoVal);
             if (pasaClienteCredito) {
@@ -1299,7 +1298,6 @@
         document.getElementById('modalFecha').valueAsDate = new Date();
         document.getElementById('modalTasa').value = document.getElementById('tasa').value;
         
-        // Calcular el restante total de este cliente para sugerirlo automáticamente
         let totalRestanteCliente = 0;
         globalVentasData.forEach(v => {
             if (v.cliente === nombreCliente && (v.estado_pago === 'No' || v.estado_pago === 'Parcialmente')) {
@@ -1329,7 +1327,6 @@
 
         if (modoMasivo) {
             const nombreCliente = document.getElementById('modalVentaId').value;
-            // Encontrar todas las ventas pendientes de este cliente
             let ventasCliente = globalVentasData.filter(v => v.cliente === nombreCliente && (v.estado_pago === 'No' || v.estado_pago === 'Parcialmente'));
             if (ventasCliente.length === 0) return;
 
@@ -1466,14 +1463,8 @@
             .eq('tipoTransaccion', 'EGRESOS')
             .ilike('categoria', '%INSUMOS US%');
 
-        const tbody = document.querySelector('#tablaInsumosUs tbody');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-        let totalInsumos = 0;
-
         if (err1 && err2) {
             globalInsumosData = [];
-            document.getElementById('resumenMontoInvertido').textContent = `$ 0.00`;
             actualizarAnaliticasGlobales();
             return;
         }
@@ -1487,36 +1478,7 @@
             return (b.id || 0) - (a.id || 0);
         });
 
-        globalInsumosData.forEach(m => {
-            let valorMonto = parseFloat(m.montoOriginal || m.montoUsd || m.monto || 0);
-            totalInsumos += valorMonto;
-            
-            tbody.innerHTML += `
-                <tr>
-                    <td>${m.id || ''}</td>
-                    <td>${m.fecha || ''}</td>
-                    <td class="tabla-descripcion">${m.descripcion || ''}</td>
-                    <td>${m.categoria || ''}</td>
-                    <td>$ ${valorMonto.toFixed(2)}</td>
-                </tr>
-            `;
-        });
-
-        document.getElementById('resumenMontoInvertido').textContent = `$ ${totalInsumos.toFixed(2)}`;
         actualizarAnaliticasGlobales();
-    }
-
-    function actualizarResumenSuperior(ventas) {
-        let totalVentas = ventas.reduce((acc, v) => acc + (v.monto_usd || 0), 0);
-        let ventasPagadasMonto = ventas.filter(v => v.estado_pago === 'Sí').reduce((acc, v) => acc + (v.monto_usd || 0), 0);
-        let gananciaNeta = ventasPagadasMonto - (ventasPagadasMonto * 0.5);
-
-        let totalCredito = ventas.filter(v => v.estado_pago === 'No').reduce((acc, v) => acc + (v.monto_usd || 0), 0) +
-                           ventas.filter(v => v.estado_pago === 'Parcialmente').reduce((acc, v) => acc + ((v.monto_usd || 0) - (v.monto_abonado || 0)), 0);
-
-        document.getElementById('resumenTotalVentas').textContent = `$ ${totalVentas.toFixed(2)}`;
-        document.getElementById('resumenGananciaNeta').textContent = `$ ${gananciaNeta.toFixed(2)}`;
-        document.getElementById('resumenTotalCredito').textContent = `$ ${totalCredito.toFixed(2)}`;
     }
 
     function actualizarAnaliticasGlobales() {
@@ -1534,16 +1496,56 @@
             return m.fecha.startsWith(mesFiltro);
         });
 
-        let gastosInsumos = insumosFiltrados.reduce((acc, m) => acc + parseFloat(m.montoOriginal || m.montoUsd || m.monto || 0), 0);
-        let totalVentasCompletas = ventasFiltradas.filter(v => v.estado_pago === 'Sí').reduce((acc, v) => acc + (v.monto_usd || 0), 0);
+        let totalVentasSup = ventasFiltradas.reduce((acc, v) => acc + (v.monto_usd || 0), 0);
+        let ventasPagadasSup = ventasFiltradas.filter(v => v.estado_pago === 'Sí').reduce((acc, v) => acc + (v.monto_usd || 0), 0);
+        let gananciaNetaSup = ventasPagadasSup - (ventasPagadasSup * 0.5);
+
+        let totalCreditoSup = ventasFiltradas.filter(v => v.estado_pago === 'No').reduce((acc, v) => acc + (v.monto_usd || 0), 0) +
+                              ventasFiltradas.filter(v => v.estado_pago === 'Parcialmente').reduce((acc, v) => acc + ((v.monto_usd || 0) - (v.monto_abonado || 0)), 0);
+
+        let totalInsumosMes = insumosFiltrados.reduce((acc, m) => acc + parseFloat(m.montoOriginal || m.montoUsd || m.monto || 0), 0);
+
+        document.getElementById('resumenTotalVentas').textContent = `$ ${totalVentasSup.toFixed(2)}`;
+        document.getElementById('resumenGananciaNeta').textContent = `$ ${gananciaNetaSup.toFixed(2)}`;
+        document.getElementById('resumenTotalCredito').textContent = `$ ${totalCreditoSup.toFixed(2)}`;
+        document.getElementById('resumenMontoInvertido').textContent = `$ ${totalInsumosMes.toFixed(2)}`;
+
+        const tbodyInsumos = document.querySelector('#tablaInsumosUs tbody');
+        if (tbodyInsumos) {
+            tbodyInsumos.innerHTML = '';
+            insumosFiltrados.forEach(m => {
+                let valorMonto = parseFloat(m.montoOriginal || m.montoUsd || m.monto || 0);
+                tbodyInsumos.innerHTML += `
+                    <tr>
+                        <td>${m.id || ''}</td>
+                        <td>${m.fecha || ''}</td>
+                        <td class="tabla-descripcion">${m.descripcion || ''}</td>
+                        <td>${m.categoria || ''}</td>
+                        <td>$ ${valorMonto.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            if (tbodyInsumos.innerHTML === '') {
+                tbodyInsumos.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No hay gastos de insumos para este período.</td></tr>`;
+            }
+        }
+
+        let gastosInsumos = totalInsumosMes;
+        let totalVentasCompletas = ventasPagadasSup;
+        
+        // CORREGIDO: Suma exacta del monto_abonado real en todas las ventas parciales filtradas
+        let totalVentasParciales = ventasFiltradas
+            .filter(v => v.estado_pago === 'Parcialmente')
+            .reduce((acc, v) => acc + (parseFloat(v.monto_abonado) || 0), 0);
+        
         let totalVentasPendientes = ventasFiltradas.filter(v => v.estado_pago === 'No').reduce((acc, v) => acc + (v.monto_usd || 0), 0);
-        let totalVentasParciales = ventasFiltradas.filter(v => v.estado_pago === 'Parcialmente').reduce((acc, v) => acc + ((v.monto_usd || 0) - (v.monto_abonado || 0)), 0);
 
         if (chart1) chart1.destroy();
         chart1 = new Chart(document.getElementById('graficoVentasVsInsumos').getContext('2d'), {
             type: 'bar',
             data: {
-                labels: ['Insumos US', 'Ventas Completas', 'Ventas Pendientes', 'Ventas Parciales'],
+                labels: ['Insumos US', 'Ventas Completas', 'Ventas Pendientes', 'Ventas Abonadas (Parcial)'],
                 datasets: [{ data: [gastosInsumos, totalVentasCompletas, totalVentasPendientes, totalVentasParciales], backgroundColor: ['#e11d48', '#059669', '#d97706', '#db2777'], borderRadius: 8 }]
             },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
@@ -1551,7 +1553,7 @@
         });
 
         if (chart2) chart2.destroy();
-        let gananciaNetaGrafico = totalVentasCompletas - (totalVentasCompletas * 0.5);
+        let gananciaNetaGrafico = gananciaNetaSup;
         chart2 = new Chart(document.getElementById('graficoVentas50').getContext('2d'), {
             type: 'bar',
             data: {
@@ -1563,7 +1565,7 @@
         });
 
         const resumenProductos = {};
-        ventasFiltradas.forEach(v => {
+        ventasFiltradas.exports = ventasFiltradas.forEach(v => {
             const prod = v.producto || 'OTRO';
             resumenProductos[prod] = (resumenProductos[prod] || 0) + (v.monto_usd || 0);
         });
